@@ -1,0 +1,8 @@
+fastapi==0.121.1
+uvicorn[standard]==0.38.0
+numpy==1.26.4
+scipy==1.13.1
+pandas==2.2.3
+python-multipart==0.0.20
+keras==3.10.0
+jax[cpu]==0.4.30
