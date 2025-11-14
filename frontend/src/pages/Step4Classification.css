@@ -1,5 +1,5 @@
 .step4 .step-content {
-  grid-template-columns: 1.2fr 0.8fr;
+  grid-template-columns: 1.6fr 0.7fr;
   gap: 2rem;
 }
 
@@ -23,6 +23,52 @@
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 1.5rem;
+}
+
+.graph-display-options {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.display-checkboxes {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.display-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--darker-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--transition-speed);
+  white-space: nowrap;
+}
+
+.display-checkbox-label:hover {
+  border-color: var(--secondary-color);
+  background: rgba(123, 44, 191, 0.1);
+}
+
+.display-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+}
+
+.display-checkbox-label span {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  user-select: none;
 }
 
 .visualization-tabs {

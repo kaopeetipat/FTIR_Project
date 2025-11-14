@@ -47,7 +47,8 @@ function Step1InputSpectrum({
   };
 
   const handleFile = async (file) => {
-    if (!file.name.endsWith('.csv')) {
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.csv')) {
       setError('Only CSV files are accepted');
       return;
     }
@@ -243,8 +244,8 @@ function SpectrumChart({ wavenumbers, intensities }) {
   const height = 400;
   const padding = { top: 40, right: 40, bottom: 60, left: 60 };
 
-  const xMin = Math.min(...wavenumbers);
-  const xMax = Math.max(...wavenumbers);
+  const xMin = 650;
+  const xMax = 4000;
   const yMin = Math.min(...intensities);
   const yMax = Math.max(...intensities);
 
@@ -258,6 +259,22 @@ function SpectrumChart({ wavenumbers, intensities }) {
     .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(intensities[i])}`)
     .join(' ');
 
+  // Generate X-axis ticks
+  const xTicks = [];
+  const xTickCount = 5;
+  for (let i = 0; i <= xTickCount; i++) {
+    const value = xMin + (i / xTickCount) * (xMax - xMin);
+    xTicks.push(value);
+  }
+
+  // Generate Y-axis ticks
+  const yTicks = [];
+  const yTickCount = 5;
+  for (let i = 0; i <= yTickCount; i++) {
+    const value = yMin + (i / yTickCount) * (yMax - yMin);
+    yTicks.push(value);
+  }
+
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg">
       <defs>
@@ -269,15 +286,29 @@ function SpectrumChart({ wavenumbers, intensities }) {
 
       {/* Grid */}
       <g className="grid" opacity="0.1">
-        {[0, 1, 2, 3, 4].map(i => {
-          const y = padding.top + (i * (height - padding.top - padding.bottom) / 4);
+        {yTicks.map((yVal, i) => {
+          const y = yScale(yVal);
           return (
-            <line 
+            <line
               key={`h-${i}`}
-              x1={padding.left} 
-              y1={y} 
-              x2={width - padding.right} 
+              x1={padding.left}
+              y1={y}
+              x2={width - padding.right}
               y2={y}
+              stroke="#666"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {xTicks.map((xVal, i) => {
+          const x = xScale(xVal);
+          return (
+            <line
+              key={`v-${i}`}
+              x1={x}
+              y1={padding.top}
+              x2={x}
+              y2={height - padding.bottom}
               stroke="#666"
               strokeWidth="1"
             />
@@ -286,7 +317,7 @@ function SpectrumChart({ wavenumbers, intensities }) {
       </g>
 
       {/* Spectrum Line */}
-      <path 
+      <path
         d={pathData}
         fill="none"
         stroke="url(#lineGradient)"
@@ -296,15 +327,15 @@ function SpectrumChart({ wavenumbers, intensities }) {
       />
 
       {/* Axes */}
-      <line 
-        x1={padding.left} 
+      <line
+        x1={padding.left}
         y1={height - padding.bottom}
         x2={width - padding.right}
         y2={height - padding.bottom}
         stroke="#666"
         strokeWidth="2"
       />
-      <line 
+      <line
         x1={padding.left}
         y1={padding.top}
         x2={padding.left}
@@ -313,9 +344,61 @@ function SpectrumChart({ wavenumbers, intensities }) {
         strokeWidth="2"
       />
 
-      {/* Labels */}
-      <text 
-        x={width / 2} 
+      {/* X-axis Ticks and Labels */}
+      {xTicks.map((value, i) => {
+        const x = xScale(value);
+        return (
+          <g key={`x-tick-${i}`}>
+            <line
+              x1={x}
+              y1={height - padding.bottom}
+              x2={x}
+              y2={height - padding.bottom + 6}
+              stroke="#666"
+              strokeWidth="2"
+            />
+            <text
+              x={x}
+              y={height - padding.bottom + 20}
+              textAnchor="middle"
+              fill="#999"
+              fontSize="11"
+            >
+              {value.toFixed(0)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Y-axis Ticks and Labels */}
+      {yTicks.map((value, i) => {
+        const y = yScale(value);
+        return (
+          <g key={`y-tick-${i}`}>
+            <line
+              x1={padding.left - 6}
+              y1={y}
+              x2={padding.left}
+              y2={y}
+              stroke="#666"
+              strokeWidth="2"
+            />
+            <text
+              x={padding.left - 10}
+              y={y + 4}
+              textAnchor="end"
+              fill="#999"
+              fontSize="11"
+            >
+              {value.toFixed(2)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Axis Labels */}
+      <text
+        x={width / 2}
         y={height - 10}
         textAnchor="middle"
         fill="#999"
@@ -323,8 +406,8 @@ function SpectrumChart({ wavenumbers, intensities }) {
       >
         Wavenumber (cm⁻¹)
       </text>
-      <text 
-        x={20} 
+      <text
+        x={20}
         y={height / 2}
         textAnchor="middle"
         fill="#999"
@@ -332,14 +415,6 @@ function SpectrumChart({ wavenumbers, intensities }) {
         transform={`rotate(-90, 20, ${height / 2})`}
       >
         Intensity
-      </text>
-
-      {/* Tick Labels */}
-      <text x={padding.left} y={height - padding.bottom + 20} textAnchor="middle" fill="#999" fontSize="12">
-        {xMin.toFixed(0)}
-      </text>
-      <text x={width - padding.right} y={height - padding.bottom + 20} textAnchor="middle" fill="#999" fontSize="12">
-        {xMax.toFixed(0)}
       </text>
     </svg>
   );

@@ -68,7 +68,7 @@ body {
   height: 100%;
   max-height: calc(100vh - var(--header-height) - 4rem);
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 7fr 3fr;
   gap: 2rem;
   align-items: center;
 }

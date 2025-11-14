@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import './Step4Classification.css';
 
 const CLASSIFICATION_MODELS = [
-  { value: 'disable', label: 'Disable (Use Correlation)' },
+  { value: 'disable', label: <>Correlation <br/> (Library Search)</> },
   { value: 'LeNet5', label: 'LeNet5' },
   { value: 'AlexNet', label: 'AlexNet' }
 ];
@@ -26,6 +26,9 @@ function Step4Classification({
   const [showClearModal, setShowClearModal] = useState(false);
   const [results, setResults] = useState(null);
   const [activeVisualization, setActiveVisualization] = useState('spectrum');
+  const [showPreprocessed, setShowPreprocessed] = useState(true);
+  const [showDenoised, setShowDenoised] = useState(true);
+  const [showClassification, setShowClassification] = useState(true);
 
   const handleApply = async () => {
     if (!classificationModel || !canProceed) return;
@@ -169,27 +172,33 @@ function Step4Classification({
             <div className="chart-wrapper">
               {results ? (
                 activeVisualization === 'spectrum' ? (
-                  <ComparisonChart 
+                  <ComparisonChart
                     wavenumbers={spectralData.wavenumbers}
-                    inputIntensities={
-                      spectralData.denoisedIntensities.length > 0 
-                        ? spectralData.denoisedIntensities 
-                        : (spectralData.preprocessedIntensities.length > 0 
-                          ? spectralData.preprocessedIntensities 
-                          : spectralData.originalIntensities)
+                    preprocessedIntensities={
+                      spectralData.preprocessedIntensities.length > 0
+                        ? spectralData.preprocessedIntensities
+                        : spectralData.originalIntensities
+                    }
+                    denoisedIntensities={
+                      spectralData.denoisedIntensities.length > 0
+                        ? spectralData.denoisedIntensities
+                        : spectralData.preprocessedIntensities
                     }
                     cleanIntensities={results.cleanSpectrum}
                     camHeatmap={results.camHeatmap}
                     showHeatmap={false}
+                    showPreprocessed={showPreprocessed}
+                    showDenoised={showDenoised}
+                    showClassification={showClassification}
                   />
                 ) : (
                   <CamChart
                     wavenumbers={spectralData.wavenumbers}
                     inputIntensities={
-                      spectralData.denoisedIntensities.length > 0 
-                        ? spectralData.denoisedIntensities 
-                        : (spectralData.preprocessedIntensities.length > 0 
-                          ? spectralData.preprocessedIntensities 
+                      spectralData.denoisedIntensities.length > 0
+                        ? spectralData.denoisedIntensities
+                        : (spectralData.preprocessedIntensities.length > 0
+                          ? spectralData.preprocessedIntensities
                           : spectralData.originalIntensities)
                     }
                     camHeatmap={results.camHeatmap}
@@ -201,6 +210,38 @@ function Step4Classification({
                 </div>
               )}
             </div>
+
+            {/* Graph Display Options - Inside Chart Panel */}
+            {results && activeVisualization === 'spectrum' && (
+              <div className="graph-display-options">
+                <div className="display-checkboxes">
+                  <label className="display-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={showPreprocessed}
+                      onChange={(e) => setShowPreprocessed(e.target.checked)}
+                    />
+                    <span>Preprocessed Spectrum</span>
+                  </label>
+                  <label className="display-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={showDenoised}
+                      onChange={(e) => setShowDenoised(e.target.checked)}
+                    />
+                    <span>Denoised Spectrum</span>
+                  </label>
+                  <label className="display-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={showClassification}
+                      onChange={(e) => setShowClassification(e.target.checked)}
+                    />
+                    <span>Classification Reference</span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -300,27 +341,42 @@ function Step4Classification({
   );
 }
 
-// Comparison Chart Component
-function ComparisonChart({ wavenumbers, inputIntensities, cleanIntensities, camHeatmap = [], showHeatmap = true }) {
+// Comparison Chart Component - Shows 3 spectrums
+function ComparisonChart({
+  wavenumbers,
+  preprocessedIntensities,
+  denoisedIntensities,
+  cleanIntensities,
+  camHeatmap = [],
+  showHeatmap = true,
+  showPreprocessed = true,
+  showDenoised = true,
+  showClassification = true
+}) {
+
   const width = 600;
   const height = 400;
   const padding = { top: 40, right: 40, bottom: 60, left: 60 };
 
-  const xMin = Math.min(...wavenumbers);
-  const xMax = Math.max(...wavenumbers);
-  
-  const allIntensities = [...inputIntensities, ...cleanIntensities];
+  const xMin = 650;
+  const xMax = 4000;
+
+  const allIntensities = [...preprocessedIntensities, ...denoisedIntensities, ...cleanIntensities];
   const yMin = Math.min(...allIntensities);
   const yMax = Math.max(...allIntensities);
 
-  const xScale = (x) => 
+  const xScale = (x) =>
     padding.left + ((x - xMin) / (xMax - xMin)) * (width - padding.left - padding.right);
-  
-  const yScale = (y) => 
+
+  const yScale = (y) =>
     height - padding.bottom - ((y - yMin) / (yMax - yMin)) * (height - padding.top - padding.bottom);
 
-  const inputPath = wavenumbers
-    .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(inputIntensities[i])}`)
+  const preprocessedPath = wavenumbers
+    .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(preprocessedIntensities[i])}`)
+    .join(' ');
+
+  const denoisedPath = wavenumbers
+    .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(denoisedIntensities[i])}`)
     .join(' ');
 
   const cleanPath = wavenumbers
@@ -336,112 +392,234 @@ function ComparisonChart({ wavenumbers, inputIntensities, cleanIntensities, camH
     return `hsla(${hue}, 90%, 55%, ${alpha})`;
   };
 
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg">
-      <defs>
-        <linearGradient id="cleanGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#f59e0b" />
-          <stop offset="100%" stopColor="#fbbf24" />
-        </linearGradient>
-        <linearGradient id="inputGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#059669" />
-          <stop offset="100%" stopColor="#10b981" />
-        </linearGradient>
-      </defs>
+  // Generate X-axis ticks
+  const xTicks = [];
+  const xTickCount = 5;
+  for (let i = 0; i <= xTickCount; i++) {
+    const value = xMin + (i / xTickCount) * (xMax - xMin);
+    xTicks.push(value);
+  }
 
-      {/* Grid */}
-      <g className="grid" opacity="0.1">
-        {[0, 1, 2, 3, 4].map(i => {
-          const y = padding.top + (i * (height - padding.top - padding.bottom) / 4);
-          return (
-            <line 
-              key={`h-${i}`}
-              x1={padding.left} 
-              y1={y} 
-              x2={width - padding.right} 
-              y2={y}
-              stroke="#666"
-              strokeWidth="1"
+  // Generate Y-axis ticks
+  const yTicks = [];
+  const yTickCount = 5;
+  for (let i = 0; i <= yTickCount; i++) {
+    const value = yMin + (i / yTickCount) * (yMax - yMin);
+    yTicks.push(value);
+  }
+
+  return (
+    <>
+      <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg" style={{ width: '100%', height: 'auto' }}>
+        <defs>
+          <linearGradient id="preprocessedGradientPurpleStep4" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#7B2CBF" />
+            <stop offset="100%" stopColor="#C77DFF" />
+          </linearGradient>
+          <linearGradient id="denoisedGradientGreen" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#059669" />
+            <stop offset="100%" stopColor="#10b981" />
+          </linearGradient>
+          <linearGradient id="classificationGradientYellow" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#fbbf24" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid */}
+        <g className="grid" opacity="0.1">
+          {yTicks.map((yVal, i) => {
+            const y = yScale(yVal);
+            return (
+              <line
+                key={`h-${i}`}
+                x1={padding.left}
+                y1={y}
+                x2={width - padding.right}
+                y2={y}
+                stroke="#666"
+                strokeWidth="1"
+              />
+            );
+          })}
+          {xTicks.map((xVal, i) => {
+            const x = xScale(xVal);
+            return (
+              <line
+                key={`v-${i}`}
+                x1={x}
+                y1={padding.top}
+                x2={x}
+                y2={height - padding.bottom}
+                stroke="#666"
+                strokeWidth="1"
+              />
+            );
+          })}
+        </g>
+
+        {/* Preprocessed Spectrum (purple) */}
+        {showPreprocessed && (
+          <path
+            d={preprocessedPath}
+            fill="none"
+            stroke="url(#preprocessedGradientPurpleStep4)"
+            strokeWidth="2"
+            opacity="1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* Denoised Spectrum (green) */}
+        {showDenoised && (
+          <path
+            d={denoisedPath}
+            fill="none"
+            stroke="url(#denoisedGradientGreen)"
+            strokeWidth="2"
+            opacity="1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* Classification Reference Spectrum (yellow) */}
+        {showClassification && (
+          <path
+            d={cleanPath}
+            fill="none"
+            stroke="url(#classificationGradientYellow)"
+            strokeWidth="2"
+            opacity="1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* Heatmap overlay */}
+        {hasHeatmap && showHeatmap &&
+          wavenumbers.map((x, i) => (
+            <circle
+              key={`cam-${i}`}
+              cx={xScale(x)}
+              cy={yScale(denoisedIntensities[i])}
+              r={3}
+              fill={heatColor(camHeatmap[i])}
             />
+          ))}
+
+        {/* Axes */}
+        <line
+          x1={padding.left}
+          y1={height - padding.bottom}
+          x2={width - padding.right}
+          y2={height - padding.bottom}
+          stroke="#666"
+          strokeWidth="2"
+        />
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={height - padding.bottom}
+          stroke="#666"
+          strokeWidth="2"
+        />
+
+        {/* X-axis Ticks and Labels */}
+        {xTicks.map((value, i) => {
+          const x = xScale(value);
+          return (
+            <g key={`x-tick-${i}`}>
+              <line
+                x1={x}
+                y1={height - padding.bottom}
+                x2={x}
+                y2={height - padding.bottom + 6}
+                stroke="#666"
+                strokeWidth="2"
+              />
+              <text
+                x={x}
+                y={height - padding.bottom + 20}
+                textAnchor="middle"
+                fill="#999"
+                fontSize="11"
+              >
+                {value.toFixed(0)}
+              </text>
+            </g>
           );
         })}
-      </g>
 
-      {/* Clean Reference Spectrum */}
-      <path 
-        d={cleanPath}
-        fill="none"
-        stroke="url(#cleanGradient)"
-        strokeWidth="2"
-        opacity="0.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+        {/* Y-axis Ticks and Labels */}
+        {yTicks.map((value, i) => {
+          const y = yScale(value);
+          return (
+            <g key={`y-tick-${i}`}>
+              <line
+                x1={padding.left - 6}
+                y1={y}
+                x2={padding.left}
+                y2={y}
+                stroke="#666"
+                strokeWidth="2"
+              />
+              <text
+                x={padding.left - 10}
+                y={y + 4}
+                textAnchor="end"
+                fill="#999"
+                fontSize="11"
+              >
+                {value.toFixed(2)}
+              </text>
+            </g>
+          );
+        })}
 
-      {/* Input Spectrum */}
-      <path 
-        d={inputPath}
-        fill="none"
-        stroke="url(#inputGradient)"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+        {/* Legend */}
+        <g transform="translate(380, 20)">
+          {showPreprocessed && (
+            <>
+              <circle cx="6" cy="0" r="6" fill="#7B2CBF"/>
+              <text x="18" y="5" fill="#999" fontSize="12">Preprocessed</text>
+            </>
+          )}
 
-      {/* Heatmap overlay */}
-      {hasHeatmap && showHeatmap &&
-        wavenumbers.map((x, i) => (
-          <circle
-            key={`cam-${i}`}
-            cx={xScale(x)}
-            cy={yScale(inputIntensities[i])}
-            r={3}
-            fill={heatColor(camHeatmap[i])}
-          />
-        ))}
+          {showDenoised && (
+            <>
+              <circle cx="6" cy="15" r="6" fill="#059669"/>
+              <text x="18" y="20" fill="#999" fontSize="12">Denoised</text>
+            </>
+          )}
 
-      {/* Axes */}
-      <line 
-        x1={padding.left} 
-        y1={height - padding.bottom}
-        x2={width - padding.right}
-        y2={height - padding.bottom}
-        stroke="#666"
-        strokeWidth="2"
-      />
-      <line 
-        x1={padding.left}
-        y1={padding.top}
-        x2={padding.left}
-        y2={height - padding.bottom}
-        stroke="#666"
-        strokeWidth="2"
-      />
+          {showClassification && (
+            <>
+              <circle cx="6" cy="30" r="6" fill="#f59e0b"/>
+              <text x="18" y="35" fill="#999" fontSize="12">Classification</text>
+            </>
+          )}
 
-      {/* Legend */}
-      <g transform="translate(440, 30)">
-        <line x1="0" y1="0" x2="30" y2="0" stroke="url(#inputGradient)" strokeWidth="2"/>
-        <text x="35" y="5" fill="#999" fontSize="12">Input</text>
-        
-        <line x1="0" y1="15" x2="30" y2="15" stroke="url(#cleanGradient)" strokeWidth="2" opacity="0.7"/>
-        <text x="35" y="20" fill="#999" fontSize="12">Reference</text>
-        {hasHeatmap && showHeatmap && (
-          <>
-            <circle cx="15" cy="30" r="6" fill={heatColor(1)} />
-            <text x="35" y="35" fill="#facc15" fontSize="12">CAM intensity</text>
-          </>
-        )}
-      </g>
+          {hasHeatmap && showHeatmap && (
+            <>
+              <circle cx="6" cy="45" r="6" fill={heatColor(1)} />
+              <text x="18" y="50" fill="#facc15" fontSize="12">CAM intensity</text>
+            </>
+          )}
+        </g>
 
-      {/* Labels */}
-      <text x={width / 2} y={height - 10} textAnchor="middle" fill="#999" fontSize="14">
-        Wavenumber (cm⁻¹)
-      </text>
-      <text x={20} y={height / 2} textAnchor="middle" fill="#999" fontSize="14"
-        transform={`rotate(-90, 20, ${height / 2})`}>
-        Intensity
-      </text>
-    </svg>
+        {/* Axis Labels */}
+        <text x={width / 2} y={height - 10} textAnchor="middle" fill="#999" fontSize="14">
+          Wavenumber (cm⁻¹)
+        </text>
+        <text x={20} y={height / 2} textAnchor="middle" fill="#999" fontSize="14"
+          transform={`rotate(-90, 20, ${height / 2})`}>
+          Intensity
+        </text>
+      </svg>
+    </>
   );
 }
 
@@ -460,8 +638,8 @@ function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
     );
   }
 
-  const xMin = Math.min(...wavenumbers);
-  const xMax = Math.max(...wavenumbers);
+  const xMin = 650;
+  const xMax = 4000;
   const allIntensities = [...inputIntensities];
   const yMin = Math.min(...allIntensities);
   const yMax = Math.max(...allIntensities);

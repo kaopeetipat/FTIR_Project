@@ -126,7 +126,7 @@ function Step3Denoising({
   const isSelectionComplete = denoisingConfig.membraneFilter && denoisingConfig.denoisingModel;
 
   return (
-    <div className="step-container">
+    <div className="step-container step3">
       <div className="step-content">
         {/* Chart Panel */}
         <div className="chart-panel">
@@ -259,17 +259,17 @@ function SpectrumChart({ wavenumbers, preprocessedIntensities, denoisedIntensiti
   const height = 400;
   const padding = { top: 40, right: 40, bottom: 60, left: 60 };
 
-  const xMin = Math.min(...wavenumbers);
-  const xMax = Math.max(...wavenumbers);
-  
+  const xMin = 650;
+  const xMax = 4000;
+
   const allIntensities = [...preprocessedIntensities, ...denoisedIntensities];
   const yMin = Math.min(...allIntensities);
   const yMax = Math.max(...allIntensities);
 
-  const xScale = (x) => 
+  const xScale = (x) =>
     padding.left + ((x - xMin) / (xMax - xMin)) * (width - padding.left - padding.right);
-  
-  const yScale = (y) => 
+
+  const yScale = (y) =>
     height - padding.bottom - ((y - yMin) / (yMax - yMin)) * (height - padding.top - padding.bottom);
 
   const preprocessedPath = wavenumbers
@@ -280,9 +280,29 @@ function SpectrumChart({ wavenumbers, preprocessedIntensities, denoisedIntensiti
     .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(denoisedIntensities[i])}`)
     .join(' ');
 
+  // Generate X-axis ticks
+  const xTicks = [];
+  const xTickCount = 5;
+  for (let i = 0; i <= xTickCount; i++) {
+    const value = xMin + (i / xTickCount) * (xMax - xMin);
+    xTicks.push(value);
+  }
+
+  // Generate Y-axis ticks
+  const yTicks = [];
+  const yTickCount = 5;
+  for (let i = 0; i <= yTickCount; i++) {
+    const value = yMin + (i / yTickCount) * (yMax - yMin);
+    yTicks.push(value);
+  }
+
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg">
       <defs>
+        <linearGradient id="preprocessedGradientPurple" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#7B2CBF" />
+          <stop offset="100%" stopColor="#C77DFF" />
+        </linearGradient>
         <linearGradient id="denoisedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#059669" />
           <stop offset="100%" stopColor="#10b981" />
@@ -291,15 +311,29 @@ function SpectrumChart({ wavenumbers, preprocessedIntensities, denoisedIntensiti
 
       {/* Grid */}
       <g className="grid" opacity="0.1">
-        {[0, 1, 2, 3, 4].map(i => {
-          const y = padding.top + (i * (height - padding.top - padding.bottom) / 4);
+        {yTicks.map((yVal, i) => {
+          const y = yScale(yVal);
           return (
-            <line 
+            <line
               key={`h-${i}`}
-              x1={padding.left} 
-              y1={y} 
-              x2={width - padding.right} 
+              x1={padding.left}
+              y1={y}
+              x2={width - padding.right}
               y2={y}
+              stroke="#666"
+              strokeWidth="1"
+            />
+          );
+        })}
+        {xTicks.map((xVal, i) => {
+          const x = xScale(xVal);
+          return (
+            <line
+              key={`v-${i}`}
+              x1={x}
+              y1={padding.top}
+              x2={x}
+              y2={height - padding.bottom}
               stroke="#666"
               strokeWidth="1"
             />
@@ -307,18 +341,19 @@ function SpectrumChart({ wavenumbers, preprocessedIntensities, denoisedIntensiti
         })}
       </g>
 
-      {/* Preprocessed Spectrum (faded) */}
-      <path 
+      {/* Preprocessed Spectrum (purple with opacity 0.7) */}
+      <path
         d={preprocessedPath}
         fill="none"
-        stroke="#666"
-        strokeWidth="1"
-        opacity="0.3"
-        strokeDasharray="3,3"
+        stroke="url(#preprocessedGradientPurple)"
+        strokeWidth="2"
+        opacity="0.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
 
-      {/* Denoised Spectrum */}
-      <path 
+      {/* Denoised Spectrum (green) */}
+      <path
         d={denoisedPath}
         fill="none"
         stroke="url(#denoisedGradient)"
@@ -328,15 +363,15 @@ function SpectrumChart({ wavenumbers, preprocessedIntensities, denoisedIntensiti
       />
 
       {/* Axes */}
-      <line 
-        x1={padding.left} 
+      <line
+        x1={padding.left}
         y1={height - padding.bottom}
         x2={width - padding.right}
         y2={height - padding.bottom}
         stroke="#666"
         strokeWidth="2"
       />
-      <line 
+      <line
         x1={padding.left}
         y1={padding.top}
         x2={padding.left}
@@ -345,16 +380,68 @@ function SpectrumChart({ wavenumbers, preprocessedIntensities, denoisedIntensiti
         strokeWidth="2"
       />
 
+      {/* X-axis Ticks and Labels */}
+      {xTicks.map((value, i) => {
+        const x = xScale(value);
+        return (
+          <g key={`x-tick-${i}`}>
+            <line
+              x1={x}
+              y1={height - padding.bottom}
+              x2={x}
+              y2={height - padding.bottom + 6}
+              stroke="#666"
+              strokeWidth="2"
+            />
+            <text
+              x={x}
+              y={height - padding.bottom + 20}
+              textAnchor="middle"
+              fill="#999"
+              fontSize="11"
+            >
+              {value.toFixed(0)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Y-axis Ticks and Labels */}
+      {yTicks.map((value, i) => {
+        const y = yScale(value);
+        return (
+          <g key={`y-tick-${i}`}>
+            <line
+              x1={padding.left - 6}
+              y1={y}
+              x2={padding.left}
+              y2={y}
+              stroke="#666"
+              strokeWidth="2"
+            />
+            <text
+              x={padding.left - 10}
+              y={y + 4}
+              textAnchor="end"
+              fill="#999"
+              fontSize="11"
+            >
+              {value.toFixed(2)}
+            </text>
+          </g>
+        );
+      })}
+
       {/* Legend */}
-      <g transform="translate(460, 30)">
-        <line x1="0" y1="0" x2="30" y2="0" stroke="#666" strokeWidth="1" strokeDasharray="3,3" opacity="0.3"/>
-        <text x="35" y="5" fill="#999" fontSize="12">Input</text>
-        
-        <line x1="0" y1="15" x2="30" y2="15" stroke="url(#denoisedGradient)" strokeWidth="2"/>
-        <text x="35" y="20" fill="#999" fontSize="12">Denoised</text>
+      <g transform="translate(440, 30)">
+        <circle cx="6" cy="0" r="6" fill="#7B2CBF" opacity="0.7"/>
+        <text x="18" y="5" fill="#999" fontSize="12">Preprocessed</text>
+
+        <circle cx="6" cy="15" r="6" fill="#059669"/>
+        <text x="18" y="20" fill="#999" fontSize="12">Denoised</text>
       </g>
 
-      {/* Labels */}
+      {/* Axis Labels */}
       <text x={width / 2} y={height - 10} textAnchor="middle" fill="#999" fontSize="14">
         Wavenumber (cm⁻¹)
       </text>

@@ -1,10 +1,38 @@
-.radio-group h3 {
-  font-size: 1rem;
-  margin-bottom: 0.75rem;
+/* Reduce spacing in Step 3 control panel */
+.step3 .control-panel {
+  padding: 1.5rem;
+}
+
+.step3 .control-panel h2 {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.step3 .radio-group {
+  margin-bottom: 1rem;
+  gap: 0.5rem;
+}
+
+.step3 .radio-group h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
   color: var(--text-primary);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
+}
+
+.step3 .radio-option {
+  padding: 0.6rem 0.9rem;
+}
+
+.step3 .action-buttons {
+  margin-top: 0.5rem;
+  gap: 0.5rem;
+}
+
+.step3 .next-button {
+  margin-top: 0.8rem;
 }

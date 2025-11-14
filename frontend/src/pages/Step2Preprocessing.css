@@ -21,3 +21,41 @@
   max-width: 600px;
   margin: 0 auto;
 }
+
+.view-buttons-group {
+  margin-bottom: 1.5rem;
+}
+
+.view-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.view-button {
+  padding: 0.75rem 1rem;
+  background: var(--darker-bg);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all var(--transition-speed);
+  text-align: left;
+}
+
+.view-button:hover:not(:disabled) {
+  border-color: var(--secondary-color);
+  background: rgba(123, 44, 191, 0.1);
+}
+
+.view-button.selected {
+  border-color: var(--primary-color);
+  background: rgba(123, 44, 191, 0.2);
+  font-weight: 400;
+}
+
+.view-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
