@@ -148,7 +148,7 @@ class ModelManager:
         self.missing: List[Tuple[str, str, str]] = self._validate_inventory()
 
         if not self.registry:
-            raise RuntimeError(f"No classifier .h5 files found in {model_dir}")
+            logger.warning(f"No classifier .h5 files found in {model_dir}. Server will run in correlation-only mode.")
 
     def _discover_models(self) -> Dict[str, Dict[str, Dict[str, Path]]]:
         registry: Dict[str, Dict[str, Dict[str, Path]]] = {}
@@ -254,7 +254,7 @@ class DenoiseModelManager:
         self.cache: Dict[str, Tuple[keras.Model, int, int]] = {}
 
         if not self.registry:
-            raise RuntimeError(f"No TrainingModel_*.h5 files found in {model_dir}")
+            logger.warning(f"No TrainingModel_*.h5 files found in {model_dir}. Denoising will use fallback method.")
 
     def _discover_models(self) -> Dict[str, Dict[str, Path]]:
         registry: Dict[str, Dict[str, Path]] = {}
