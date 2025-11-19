@@ -337,7 +337,7 @@ def interpolate_spectrum(wavenumbers, intensities, target_wavenumbers):
 
 
 def baseline_correction(spectrum, poly_order: int = 6):
-    """Apply baseline correction using pybaselines imodpoly, with fallbacks."""
+    """Apply baseline correction using pybaselines imodpoly, mirroring legacy logic."""
     try:
         from pybaselines import polynomial
 
@@ -357,21 +357,25 @@ def baseline_correction(spectrum, poly_order: int = 6):
 
 
 def minmax_normalization(spectrum: np.ndarray) -> np.ndarray:
-    min_val = np.min(spectrum)
-    max_val = np.max(spectrum)
-    if np.isclose(max_val - min_val, 0):
+    """Min-Max normalize to [0, 1] (legacy-style)."""
+    s_max = np.max(spectrum)
+    s_min = np.min(spectrum)
+    if np.isclose(s_max - s_min, 0):
         return spectrum
-    return (spectrum - min_val) / (max_val - min_val)
+    return (spectrum - s_min) / (s_max - s_min)
 
 
 def process_uploaded_spectrum(
     wavenumbers: np.ndarray, intensities: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Reproduce senior pipeline: interpolate -> baseline -> normalize."""
+    """Reproduce legacy pipeline: interpolate -> baseline -> min-max normalize."""
     interpolated = interpolate_spectrum(wavenumbers, intensities, WaveRef)
     baseline_corrected = baseline_correction(interpolated)
     normalized = minmax_normalization(baseline_corrected)
-    return interpolated, baseline_corrected, normalized
+
+    # Mirror legacy batching behavior (reshape and append)
+    spec_pre = normalized.reshape(1, normalized.shape[0])
+    return interpolated, baseline_corrected, spec_pre[0]
 
 
 def apply_membrane_filter_correction(spectrum, membrane_filter):
@@ -414,32 +418,24 @@ def classify_by_correlation(spectrum: np.ndarray):
     best_material = None
     best_score = -1.0
     best_reference = None
+    best_sample_scores: List[float] = []
 
-    for material, reference in REFERENCE_MEANS.items():
-        if np.std(reference) == 0 or np.std(spectrum) == 0:
-            score = 0.0
-        else:
-            score, _ = pearsonr(spectrum, reference)
-            if np.isnan(score):
-                score = 0.0
-        if score > best_score:
+    for idx, material in enumerate(NameList):
+        avg_corr, ref_mean, corr_list = compute_library_correlation(spectrum, idx, num_samples=20)
+        if avg_corr > best_score:
             best_material = material
-            best_score = score
-            best_reference = reference
+            best_score = avg_corr
+            best_reference = ref_mean
+            best_sample_scores = corr_list
 
-    return best_material, float(best_score), best_reference
+    return best_material, float(best_score), best_reference, best_sample_scores
 
 
 def correlation_rankings(spectrum: np.ndarray, top_k: int = 3):
     scores = []
-    for material, reference in REFERENCE_MEANS.items():
-        if np.std(reference) == 0 or np.std(spectrum) == 0:
-            score = 0.0
-        else:
-            score, _ = pearsonr(spectrum, reference)
-            if np.isnan(score):
-                score = 0.0
-        scores.append((material, float(score)))
+    for idx, material in enumerate(NameList):
+        avg_corr, _, _ = compute_library_correlation(spectrum, idx, num_samples=20)
+        scores.append((material, float(avg_corr)))
 
     scores.sort(key=lambda item: item[1], reverse=True)
     return scores[:top_k]
@@ -481,6 +477,39 @@ def gradient_correlation(a: Optional[np.ndarray], b: Optional[np.ndarray]) -> fl
         return safe_correlation(grad_a, grad_b)
 
     return float(row_corr.mean())
+
+
+def pearson_similarity(a: Optional[np.ndarray], b: Optional[np.ndarray]) -> float:
+    if a is None or b is None:
+        return 0.0
+    if len(a) != len(b):
+        b = resample_signal(b, len(a))
+    if np.std(a) == 0 or np.std(b) == 0:
+        return 0.0
+    corr, _ = pearsonr(a, b)
+    if np.isnan(corr):
+        corr = 0.0
+    return float(corr)
+
+
+def get_material_samples(material_index: int) -> np.ndarray:
+    start = material_index * samples_per_material
+    end = start + samples_per_material
+    return SynCleanSet[start:end]
+
+
+def compute_library_correlation(
+    spectrum: np.ndarray, material_index: int, num_samples: int = 20
+) -> Tuple[float, Optional[np.ndarray], List[float]]:
+    samples = get_material_samples(material_index)
+    if samples.size == 0:
+        return 0.0, None, []
+
+    subset = samples[: max(1, min(num_samples, len(samples)))]
+    correlations = [pearson_similarity(spectrum, ref) for ref in subset]
+    avg_corr = float(np.mean(correlations)) if correlations else 0.0
+    mean_reference = np.mean(subset, axis=0)
+    return avg_corr, mean_reference, correlations
 
 
 def generate_cam_heatmap(
@@ -775,23 +804,21 @@ async def classify_spectrum(
             baseline_spectrum = baseline_array
 
         if classification_model.lower() == "disable":
-            plastic_type, correlation, clean_spectrum = classify_by_correlation(
-                spectrum
-            )
+            (
+                plastic_type,
+                correlation,
+                clean_spectrum,
+                _,
+            ) = classify_by_correlation(spectrum)
             comparison_spectrum = (
                 baseline_spectrum if baseline_spectrum is not None else clean_spectrum
-            )
-            correlation_value = (
-                gradient_correlation(baseline_spectrum, spectrum)
-                if baseline_spectrum is not None
-                else correlation
             )
 
             return JSONResponse(
                 content={
                     "plastic_type": plastic_type,
                     "accuracy": float(max(correlation, 0) * 100.0),
-                    "correlation": float(correlation_value),
+                    "correlation": float(correlation),
                     "clean_spectrum": comparison_spectrum.tolist()
                     if comparison_spectrum is not None
                     else [],
@@ -827,22 +854,20 @@ async def classify_spectrum(
                 classification_model,
                 model_error.detail,
             )
-            plastic_type, correlation, clean_spectrum = classify_by_correlation(
-                spectrum
-            )
+            (
+                plastic_type,
+                correlation,
+                clean_spectrum,
+                _,
+            ) = classify_by_correlation(spectrum)
             comparison_spectrum = (
                 baseline_spectrum if baseline_spectrum is not None else clean_spectrum
-            )
-            correlation_value = (
-                gradient_correlation(baseline_spectrum, spectrum)
-                if baseline_spectrum is not None
-                else correlation
             )
             return JSONResponse(
                 content={
                     "plastic_type": plastic_type,
                     "accuracy": float(max(correlation, 0) * 100.0),
-                    "correlation": float(correlation_value),
+                    "correlation": float(correlation),
                     "clean_spectrum": comparison_spectrum.tolist()
                     if comparison_spectrum is not None
                     else [],
@@ -870,14 +895,12 @@ async def classify_spectrum(
             class_idx,
         ) = classify_with_model(spectrum, model, required_len)
 
-        clean_reference = REFERENCE_MEANS.get(plastic_type)
+        class_index = NameList.index(plastic_type)
+        correlation_value, clean_reference, sample_scores = compute_library_correlation(
+            spectrum, class_index, num_samples=20
+        )
         comparison_spectrum = (
             baseline_spectrum if baseline_spectrum is not None else clean_reference
-        )
-        correlation_value = (
-            gradient_correlation(baseline_spectrum, spectrum)
-            if baseline_spectrum is not None
-            else gradient_correlation(clean_reference, spectrum)
         )
 
         cam_heatmap = []

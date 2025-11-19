@@ -74,6 +74,7 @@ function Step4Classification({
         plasticType: data.plastic_type,
         correlation: data.correlation,
         cleanSpectrum: data.clean_spectrum,
+        classificationReference: data.reference_spectrum || [],
         warning: data.warning || null,
         camHeatmap: data.cam_heatmap || []
       });
@@ -184,7 +185,11 @@ function Step4Classification({
                         ? spectralData.denoisedIntensities
                         : spectralData.preprocessedIntensities
                     }
-                    cleanIntensities={results.cleanSpectrum}
+                    classificationReference={
+                      results.classificationReference?.length
+                        ? results.classificationReference
+                        : results.cleanSpectrum
+                    }
                     camHeatmap={results.camHeatmap}
                     showHeatmap={false}
                     showPreprocessed={showPreprocessed}
@@ -346,7 +351,7 @@ function ComparisonChart({
   wavenumbers,
   preprocessedIntensities,
   denoisedIntensities,
-  cleanIntensities,
+  classificationReference,
   camHeatmap = [],
   showHeatmap = true,
   showPreprocessed = true,
@@ -361,7 +366,11 @@ function ComparisonChart({
   const xMin = 650;
   const xMax = 4000;
 
-  const allIntensities = [...preprocessedIntensities, ...denoisedIntensities, ...cleanIntensities];
+  const allIntensities = [
+    ...preprocessedIntensities,
+    ...denoisedIntensities,
+    ...(classificationReference || [])
+  ];
   const yMin = Math.min(...allIntensities);
   const yMax = Math.max(...allIntensities);
 
@@ -379,9 +388,12 @@ function ComparisonChart({
     .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(denoisedIntensities[i])}`)
     .join(' ');
 
-  const cleanPath = wavenumbers
-    .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(cleanIntensities[i])}`)
-    .join(' ');
+  const classificationPath =
+    classificationReference && classificationReference.length === wavenumbers.length
+      ? wavenumbers
+          .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(classificationReference[i])}`)
+          .join(' ')
+      : null;
 
   const hasHeatmap = Array.isArray(camHeatmap) && camHeatmap.length === wavenumbers.length;
 
@@ -485,9 +497,9 @@ function ComparisonChart({
         )}
 
         {/* Classification Reference Spectrum (yellow) */}
-        {showClassification && (
+        {showClassification && classificationPath && (
           <path
-            d={cleanPath}
+            d={classificationPath}
             fill="none"
             stroke="url(#classificationGradientYellow)"
             strokeWidth="2"
