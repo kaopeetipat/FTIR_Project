@@ -1142,7 +1142,7 @@ function ComparisonChart({
         })}
 
         {/* Legend */}
-        <g transform="translate(380, 20)">
+        <g transform="translate(450, 20)">
           {showPreprocessed && (
             <>
               <circle cx="6" cy="0" r="6" fill="#7B2CBF"/>
@@ -1190,7 +1190,7 @@ export default Step4Classification;
 function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
   const width = 600;
   const height = 400;
-  const padding = { top: 40, right: 40, bottom: 60, left: 60 };
+  const padding = { top: 40, right: 100, bottom: 60, left: 60 };
 
   if (!camHeatmap || camHeatmap.length !== wavenumbers.length) {
     return (
@@ -1206,10 +1206,10 @@ function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
   const yMin = Math.min(...allIntensities);
   const yMax = Math.max(...allIntensities);
 
-  const xScale = (x) => 
+  const xScale = (x) =>
     padding.left + ((x - xMin) / (xMax - xMin)) * (width - padding.left - padding.right);
-  
-  const yScale = (y) => 
+
+  const yScale = (y) =>
     height - padding.bottom - ((y - yMin) / (yMax - yMin)) * (height - padding.top - padding.bottom);
 
   const heatColor = (value) => {
@@ -1219,6 +1219,13 @@ function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
     return `hsla(${hue}, 90%, 55%, ${alpha})`;
   };
 
+  // Generate axis ticks
+  const xTicks = [650, 1000, 1500, 2000, 2500, 3000, 3500, 4000];
+  const yTicks = [];
+  for (let i = 0; i <= 5; i++) {
+    yTicks.push(yMin + (i / 5) * (yMax - yMin));
+  }
+
   const inputPath = wavenumbers
     .map((x, i) => `${i === 0 ? 'M' : 'L'} ${xScale(x)} ${yScale(inputIntensities[i])}`)
     .join(' ');
@@ -1226,7 +1233,7 @@ function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg">
       {/* Input Spectrum */}
-      <path 
+      <path
         d={inputPath}
         fill="none"
         stroke="#0ea5e9"
@@ -1247,15 +1254,15 @@ function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
       ))}
 
       {/* Axes */}
-      <line 
-        x1={padding.left} 
+      <line
+        x1={padding.left}
         y1={height - padding.bottom}
         x2={width - padding.right}
         y2={height - padding.bottom}
         stroke="#666"
         strokeWidth="2"
       />
-      <line 
+      <line
         x1={padding.left}
         y1={padding.top}
         x2={padding.left}
@@ -1264,12 +1271,85 @@ function CamChart({ wavenumbers, inputIntensities, camHeatmap = [] }) {
         strokeWidth="2"
       />
 
-      {/* Legend */}
-      <g transform="translate(440, 30)">
-        <line x1="0" y1="0" x2="30" y2="0" stroke="#0ea5e9" strokeWidth="2"/>
-        <text x="35" y="5" fill="#999" fontSize="12">Input Spectrum</text>
-        <circle cx="15" cy="20" r="8" fill={heatColor(1)} />
-        <text x="35" y="25" fill="#facc15" fontSize="12">High CAM response</text>
+      {/* X-axis Ticks and Labels */}
+      {xTicks.map((value, i) => {
+        const x = xScale(value);
+        return (
+          <g key={`x-tick-${i}`}>
+            <line
+              x1={x}
+              y1={height - padding.bottom}
+              x2={x}
+              y2={height - padding.bottom + 6}
+              stroke="#666"
+              strokeWidth="2"
+            />
+            <text
+              x={x}
+              y={height - padding.bottom + 20}
+              textAnchor="middle"
+              fill="#999"
+              fontSize="11"
+            >
+              {value.toFixed(0)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Y-axis Ticks and Labels */}
+      {yTicks.map((value, i) => {
+        const y = yScale(value);
+        return (
+          <g key={`y-tick-${i}`}>
+            <line
+              x1={padding.left - 6}
+              y1={y}
+              x2={padding.left}
+              y2={y}
+              stroke="#666"
+              strokeWidth="2"
+            />
+            <text
+              x={padding.left - 10}
+              y={y + 4}
+              textAnchor="end"
+              fill="#999"
+              fontSize="11"
+            >
+              {value.toFixed(2)}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Color Bar Legend for CAM */}
+      <g transform="translate(510, 80)">
+        <text x="15" y="-10" fill="#999" fontSize="11" fontWeight="bold" textAnchor="middle">CAM Weight</text>
+        {/* Gradient Bar */}
+        <defs>
+          <linearGradient id="camGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%" stopColor={heatColor(0)} />
+            <stop offset="25%" stopColor={heatColor(0.25)} />
+            <stop offset="50%" stopColor={heatColor(0.5)} />
+            <stop offset="75%" stopColor={heatColor(0.75)} />
+            <stop offset="100%" stopColor={heatColor(1)} />
+          </linearGradient>
+        </defs>
+
+        {/* Left side - (High) and (Low) labels */}
+        <text x="-5" y="5" fill="#999" fontSize="9" textAnchor="end">(High)</text>
+        <text x="-5" y="123" fill="#999" fontSize="9" textAnchor="end">(Low)</text>
+
+        {/* Center - Color bar */}
+        <rect x="5" y="0" width="20" height="120" fill="url(#camGradient)" stroke="#999" strokeWidth="1"/>
+
+        {/* Right side - Numeric labels */}
+        <text x="30" y="5" fill="#999" fontSize="10">1.0</text>
+        <text x="30" y="35" fill="#999" fontSize="10">0.75</text>
+        <text x="30" y="65" fill="#999" fontSize="10">0.5</text>
+        <text x="30" y="95" fill="#999" fontSize="10">0.25</text>
+        <text x="30" y="123" fill="#999" fontSize="10">0.0</text>
       </g>
 
       {/* Labels */}
