@@ -211,10 +211,11 @@ function App() {
                 />
               } 
             />
-            <Route 
-              path="/step4" 
+            <Route
+              path="/step4"
               element={
-                <Step4Classification 
+                <Step4Classification
+                  uploadedFile={uploadedFile}
                   spectralData={spectralData}
                   setSpectralData={setSpectralData}
                   denoisingConfig={denoisingConfig}
@@ -226,7 +227,7 @@ function App() {
                   canProceed={appliedSteps.step3}
                   isMobile={isMobile}
                 />
-              } 
+              }
             />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
