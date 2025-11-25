@@ -18,6 +18,8 @@ import json
 import logging
 
 import keras
+import tensorflow as tf
+from tensorflow import GradientTape
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -144,7 +146,7 @@ class ModelManager:
     def __init__(self, model_dir: Path) -> None:
         self.model_dir = model_dir
         self.registry = self._discover_models()
-        self.cache: Dict[str, Tuple[keras.Model, int]] = {}
+        self.cache: Dict[str, Tuple[keras.Model, int, Optional[str]]] = {}
         self.missing: List[Tuple[str, str, str]] = self._validate_inventory()
 
         if not self.registry:
@@ -229,16 +231,23 @@ class ModelManager:
             )
         return model_path
 
-    def load(self, model_path: Path) -> Tuple[keras.Model, int]:
+    def load(self, model_path: Path) -> Tuple[keras.Model, int, Optional[str]]:
         key = model_path.stem
         if key not in self.cache:
             logger.info("Loading classifier %s", model_path.name)
             model = keras.models.load_model(model_path, compile=False)
+            logits_layer = model.layers[-1]
+            if hasattr(logits_layer, "activation"):
+                logits_layer.activation = keras.activations.linear
             input_shape = model.input_shape
             if isinstance(input_shape, list):
                 input_shape = input_shape[0]
             required_len = int(input_shape[1])
-            self.cache[key] = (model, required_len)
+            last_conv_layer = _find_last_conv_layer(model)
+            cam_layer_name: Optional[str] = None
+            if last_conv_layer is not None:
+                cam_layer_name = last_conv_layer.name
+            self.cache[key] = (model, required_len, cam_layer_name)
         return self.cache[key]
 
 
@@ -414,6 +423,12 @@ def prepare_for_model(signal: np.ndarray, required_len: int) -> np.ndarray:
     return processed
 
 
+def logits_to_probabilities(logits: np.ndarray) -> np.ndarray:
+    tensor = tf.convert_to_tensor(logits)
+    probs = tf.nn.softmax(tensor, axis=-1)
+    return probs.numpy()
+
+
 def classify_by_correlation(spectrum: np.ndarray):
     best_material = None
     best_score = -1.0
@@ -512,18 +527,110 @@ def compute_library_correlation(
     return avg_corr, mean_reference, correlations
 
 
-def generate_cam_heatmap(
+def _find_last_conv_layer(model: keras.Model):
+    """Return the deepest convolutional layer or None."""
+    try:
+        from keras.layers import Conv1D, Conv2D, Conv3D
+    except ImportError:  # pragma: no cover - defensive guard
+        return None
+
+    for layer in reversed(model.layers):
+        if isinstance(layer, (Conv1D, Conv2D, Conv3D)):
+            return layer
+    return None
+
+
+def _grad_cam_heatmap(
+    model: keras.Model, prepared_input: np.ndarray, class_idx: int
+) -> np.ndarray:
+    """Attempt to build Grad-CAM using the last convolution layer."""
+    conv_layer = _find_last_conv_layer(model)
+    if conv_layer is None:
+        raise RuntimeError("No convolutional layer found for Grad-CAM.")
+
+    grad_model = keras.Model(model.inputs, [conv_layer.output, model.output])
+    prepared_tensor = tf.convert_to_tensor(prepared_input)
+    with GradientTape() as tape:
+        conv_outputs, logits = grad_model(prepared_tensor, training=False)
+        tape.watch(conv_outputs)
+        probabilities = tf.nn.softmax(logits, axis=-1)
+        target = tf.math.log(tf.maximum(probabilities[:, class_idx], 1e-8))
+
+    gradients = tape.gradient(target, conv_outputs)
+    if gradients is None:
+        raise RuntimeError("Failed to compute gradients for CAM.")
+
+    conv_outputs = conv_outputs[0]
+    gradients = gradients[0]
+    weights = tf.reduce_mean(gradients, axis=0)
+    heatmap = tf.reduce_sum(conv_outputs * weights, axis=-1)
+    heatmap = tf.nn.relu(heatmap)
+
+    heatmap_np = heatmap.numpy()
+    max_val = float(np.max(heatmap_np)) if heatmap_np.size else 0.0
+    if max_val > 0:
+        heatmap_np /= max_val
+    return heatmap_np
+
+
+def _hires_cam_heatmap(
+    model: keras.Model,
+    prepared_input: np.ndarray,
+    class_idx: int,
+    layer_name: Optional[str] = "LastCnnBlock",
+) -> np.ndarray:
+    """Higher-resolution CAM based on explicit conv block gradients (LeNet5)."""
+    target_layer = None
+    if layer_name:
+        try:
+            target_layer = model.get_layer(layer_name)
+        except ValueError:
+            target_layer = None
+    if target_layer is None:
+        target_layer = _find_last_conv_layer(model)
+    if target_layer is None:
+        raise RuntimeError("No suitable convolutional layer found for hi-res CAM.")
+
+    grad_model = keras.Model(model.inputs, [target_layer.output, model.output])
+    prepared_tensor = tf.convert_to_tensor(prepared_input)
+
+    with GradientTape() as tape:
+        conv_output, logits = grad_model(prepared_tensor, training=False)
+        tape.watch(conv_output)
+        probabilities = tf.nn.softmax(logits, axis=-1)
+        target = tf.math.log(tf.maximum(probabilities[:, class_idx], 1e-8))
+
+    gradients = tape.gradient(target, conv_output)
+    if gradients is None:
+        raise RuntimeError("Failed to compute gradients for hi-res CAM.")
+
+    conv_output = conv_output[0]
+    gradients = gradients[0]
+    weighted = conv_output * gradients
+
+    heatmap = tf.reduce_mean(weighted, axis=-1)
+    heatmap = tf.nn.relu(heatmap)
+
+    heatmap_np = heatmap.numpy()
+    max_val = float(np.max(heatmap_np)) if heatmap_np.size else 0.0
+    if max_val > 0:
+        heatmap_np /= max_val
+    return heatmap_np
+
+
+def _occlusion_cam_heatmap(
     model: keras.Model,
     prepared_input: np.ndarray,
     class_idx: int,
     window_size: int = 64,
     stride: int = 32,
 ) -> np.ndarray:
-    """Occlusion-based class activation approximation along the spectrum."""
+    """Occlusion-based saliency used as a safety fallback."""
     window_size = max(8, min(window_size, prepared_input.shape[1]))
     stride = max(4, stride)
 
-    base_pred = model.predict(prepared_input, verbose=0)[0][class_idx]
+    base_logits = model.predict(prepared_input, verbose=0)[0]
+    base_prob = logits_to_probabilities(base_logits)[class_idx]
     input_len = prepared_input.shape[1]
     heatmap = np.zeros(input_len, dtype=np.float32)
 
@@ -531,27 +638,48 @@ def generate_cam_heatmap(
         end = min(input_len, start + window_size)
         perturbed = prepared_input.copy()
         perturbed[0, start:end, 0] = 0.0
-        pred = model.predict(perturbed, verbose=0)[0][class_idx]
-        drop = max(base_pred - pred, 0.0)
+        perturbed_logits = model.predict(perturbed, verbose=0)[0]
+        perturbed_prob = logits_to_probabilities(perturbed_logits)[class_idx]
+        drop = max(base_prob - perturbed_prob, 0.0)
         heatmap[start:end] += drop
 
     max_val = np.max(heatmap)
     if max_val > 0:
         heatmap /= max_val
-
     return heatmap
+
+
+def generate_cam_heatmap(
+    model: keras.Model,
+    prepared_input: np.ndarray,
+    class_idx: int,
+    layer_name: Optional[str] = None,
+) -> np.ndarray:
+    """Generate CAM preferring hi-res conv block maps when available."""
+    try:
+        return _hires_cam_heatmap(model, prepared_input, class_idx, layer_name)
+    except Exception:
+        logger.exception("Hi-res CAM failed; falling back to Grad-CAM.")
+
+    try:
+        return _grad_cam_heatmap(model, prepared_input, class_idx)
+    except Exception:
+        logger.exception("Grad-CAM failed; falling back to occlusion CAM.")
+
+    return _occlusion_cam_heatmap(model, prepared_input, class_idx)
 
 
 def classify_with_model(
     spectrum: np.ndarray, model: keras.Model, required_len: int
 ) -> Tuple[str, float, List[float], np.ndarray, int]:
     prepared = prepare_for_model(spectrum, required_len)
-    predictions = model.predict(prepared, verbose=0)[0]
-    class_idx = int(np.argmax(predictions))
+    logits = model.predict(prepared, verbose=0)[0]
+    probabilities = logits_to_probabilities(logits)
+    class_idx = int(np.argmax(probabilities))
     return (
         NameList[class_idx],
-        float(predictions[class_idx]),
-        predictions.tolist(),
+        float(probabilities[class_idx]),
+        probabilities.tolist(),
         prepared,
         class_idx,
     )
@@ -764,6 +892,7 @@ async def denoise_spectrum(
                 "denoisedSpectrum": processed.tolist(),
                 "membrane_filter": membrane_filter,
                 "denoising_model": denoising_model,
+                "wavenumbers": WaveRef.tolist(),
             }
         )
     except HTTPException:
@@ -834,6 +963,7 @@ async def classify_spectrum(
                         {"plastic_type": name, "correlation": score}
                         for name, score in correlation_rankings(spectrum, top_k=3)
                     ],
+                    "wavenumbers": WaveRef.tolist(),
                 }
             )
 
@@ -845,7 +975,7 @@ async def classify_spectrum(
             model_path = model_manager.resolve_identifier(
                 classification_model, membrane_code, denoise_name
             )
-            model, required_len = model_manager.load(model_path)
+            model, required_len, cam_layer_name = model_manager.load(model_path)
         except HTTPException as model_error:
             logger.warning(
                 "Classifier combo unavailable (%s/%s/%s): %s; falling back to correlation.",
@@ -884,6 +1014,7 @@ async def classify_spectrum(
                         {"plastic_type": name, "correlation": score}
                         for name, score in correlation_rankings(spectrum, top_k=3)
                     ],
+                    "wavenumbers": WaveRef.tolist(),
                 }
             )
 
@@ -905,9 +1036,7 @@ async def classify_spectrum(
 
         cam_heatmap = []
         try:
-            raw_cam = generate_cam_heatmap(
-                model, prepared_input, class_idx, window_size=64, stride=32
-            )
+            raw_cam = generate_cam_heatmap(model, prepared_input, class_idx, cam_layer_name)
             cam_heatmap = resample_signal(raw_cam, TARGET_SPEC_LENGTH).tolist()
         except Exception:  # pragma: no cover
             logger.exception("Failed to generate CAM heatmap")
@@ -934,6 +1063,7 @@ async def classify_spectrum(
                 {"plastic_type": name, "correlation": score}
                 for name, score in correlation_rankings(spectrum, top_k=3)
             ],
+            "wavenumbers": WaveRef.tolist(),
         }
         return JSONResponse(content=response_payload)
     except HTTPException:
