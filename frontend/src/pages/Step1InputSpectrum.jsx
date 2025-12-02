@@ -279,8 +279,8 @@ function SpectrumChart({ wavenumbers, intensities }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg">
       <defs>
         <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#7B2CBF" />
-          <stop offset="100%" stopColor="#C77DFF" />
+          <stop offset="0%" stopColor="#2563eb" />
+          <stop offset="100%" stopColor="#60a5fa" />
         </linearGradient>
       </defs>
 

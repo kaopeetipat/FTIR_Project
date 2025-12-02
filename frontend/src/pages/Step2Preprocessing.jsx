@@ -141,7 +141,7 @@ function Step2Preprocessing({
         <div className="control-panel">
           <h2>Preprocessing Options</h2>
           <p className="control-description" style={{ fontSize: "13px", marginBottom: "1.5rem", color: "var(--text-secondary)" }}>
-            Denoising spectrum will use Baseline Correction and Min-Max Normalization
+            Baseline Correction and Min-Max Normalization is the input for the Denoising Process, other options are available for viewing only.
           </p>
 
           <div className="view-buttons-group">
@@ -234,6 +234,10 @@ function SpectrumChart({ wavenumbers, originalIntensities, processedIntensities 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="spectrum-svg">
       <defs>
+        <linearGradient id="inputGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#2563eb" />
+          <stop offset="100%" stopColor="#60a5fa" />
+        </linearGradient>
         <linearGradient id="processedGradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#7B2CBF" />
           <stop offset="100%" stopColor="#C77DFF" />
@@ -276,10 +280,11 @@ function SpectrumChart({ wavenumbers, originalIntensities, processedIntensities 
       <path
         d={originalPath}
         fill="none"
-        stroke="#e8e8e8ff"
-        strokeWidth="1.5"
-        opacity="0.5"
-        strokeDasharray="3,3"
+        stroke="url(#inputGradient)"
+        strokeWidth="2"
+        opacity="1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
 
       {/* Processed Spectrum */}
@@ -364,7 +369,7 @@ function SpectrumChart({ wavenumbers, originalIntensities, processedIntensities 
 
       {/* Legend */}
       <g transform="translate(460, 30)">
-        <line x1="0" y1="0" x2="30" y2="0" stroke="#999" strokeWidth="1" strokeDasharray="3,3" opacity="0.5"/>
+        <line x1="0" y1="0" x2="30" y2="0" stroke="#2563eb" strokeWidth="2"/>
         <text x="35" y="5" fill="#999" fontSize="12">Input</text>
 
         <line x1="0" y1="15" x2="30" y2="15" stroke="#7B2CBF" strokeWidth="2"/>

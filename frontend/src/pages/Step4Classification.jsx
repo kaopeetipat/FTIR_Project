@@ -351,12 +351,12 @@ function Step4Classification({
         return section;
       };
 
-      // Add Input Spectrum (using purple color from UI)
+      // Add Input Spectrum (using blue color from UI)
       const inputSection = createChartSection(
         'Input Spectrum',
         spectralData.wavenumbers,
         spectralData.originalIntensities,
-        '#7B2CBF' // Purple from UI
+        '#2563eb' // Blue from UI
       );
       if (inputSection) content.appendChild(inputSection);
 
@@ -838,14 +838,14 @@ function Step4Classification({
           </div>
 
           <div className="completion-message">
-            <p>🎉 Analysis Complete!</p>
+            <p>Analysis Complete</p>
             <p>You can review results or go back to any step to adjust parameters.</p>
             {isApplied && results && (
               <button
                 className="print-report-button"
                 onClick={handlePrintReport}
               >
-                📄 Print Report
+                Print Report
               </button>
             )}
           </div>
